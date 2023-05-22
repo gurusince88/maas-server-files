@@ -1,0 +1,41 @@
+#!ipxe
+
+# Global variables used by all other iPXE scripts
+chain --autofree boot.ipxe.cfg ||
+echo
+echo
+echo
+echo
+echo
+echo
+echo
+echo
+echo *************************************************************************
+echo ********************** CDW / Digital Velocity ***************************
+echo *************************************************************************
+echo
+echo Looking for our Metal as a Service (MaaS) command file to build your server
+echo ${mac:hexraw}
+echo
+echo *************************************************************************
+echo *************************************************************************
+echo
+echo
+echo
+echo
+echo
+echo
+echo
+echo
+echo
+echo 
+sleep 3
+# Boot <boot-url>/<boot-dir>/mac-010203040506.ipxe if script is present
+chain --replace --autofree ${build-scripts}mac-${mac:hexraw}.ipxe ||
+
+# Boot <boot-url>/<boot-dir>/default.ipxe if script is present
+chain --replace --autofree ${build-scripts}default.ipxe ||
+
+
+# Boot <boot-url>/menu.ipxe script if all other options have been exhausted
+chain --replace --autofree ${menu-url} ||

@@ -1,0 +1,255 @@
+#!ipxe
+
+# Variables are specified in boot.ipxe.cfg
+
+# Some menu defaults
+set menu-timeout 300000
+set submenu-timeout ${menu-timeout}
+isset ${menu-default} || set menu-default reboot
+
+# Figure out if client is 64-bit capable
+cpuid --ext 29 && set arch x64 || set arch x86
+cpuid --ext 29 && set archl amd64 || set archl i386
+
+##################################################################
+###################### MAIN MENU ####################################
+##################################################################
+:start
+menu CDW / Digital Velocity MaaS Build System
+item --gap --             ---------------- for server MACADDR: ${mac:hexraw} ------------------------
+item --gap --             ----------------------- Platform Type: ${platform} -----------------------------
+item --gap --             ------------------------- Operating systems ------------------------------
+item --key u local        Boot from local disk
+item --key l menu-live    Live environments...
+item --gap --             ------------------------- Tools and utilities ----------------------------
+item --key r menu-recovery Recovery tools...
+item --key d menu-diag    Diagnostics tools...
+item --key i menu-install Installers...
+item --gap --             ------------------------- Advanced options -------------------------------
+item --key c config       Configure settings
+item shell                Drop to iPXE shell
+item reboot               Reboot computer (5 min timer)
+item
+item --key x exit         Exit iPXE and continue BIOS boot
+item --gap --
+item --gap --             --------------------------------------------------------------------------
+item --gap --             - You have reached this menu because your server has not been properly
+item --gap --             - setup for automated MaaS Build.   Please get with your Ops Team        
+item --gap --             --------------------------------------------------------------------------  
+choose --timeout ${menu-timeout} --default ${menu-default} selected || goto start
+set menu-timeout 0
+goto ${selected}
+
+########################################################################
+############ MAIN MENU ITEMS ################################################
+########################################################################
+:cancel
+echo You cancelled the menu, dropping you to a shell
+
+:shell
+echo Type 'exit' to get the back to the menu
+shell
+set menu-timeout 0
+set submenu-timeout 0
+goto start
+
+:failed
+echo Booting failed, dropping to shell
+goto shell
+
+:reboot
+reboot
+
+:exit
+exit
+
+:config
+config
+goto start
+
+:back
+set submenu-timeout 0
+clear submenu-default
+goto start
+
+
+
+:local
+echo Booting OS from local disk for ${mac}
+exit 1
+goto start
+
+##################################################################
+###################### RECOVERY MENU ################################
+##################################################################
+
+:menu-recovery
+menu Recovery tools
+item sysrcd          SystemRescueCD ${sysrcd-version}
+item macrium-winpe Macrium Reflect ${macrium-version} Rescue CD (WinPE 4.0 ${arch})
+item macrium-winpe-sanboot   Macrium Reflect ${macrium-version} Rescue CD (WinPE 4.0 ${arch} with sanboot)
+item macrium-linux   Macrium Reflect ${macrium-version} Rescue CD (Linux ${arch})
+item macrium-linux-sanboot   Macrium Reflect ${macrium-version} Rescue CD (Linux ${arch} with sanboot)
+item firefly         Firefly IllumOS recovery environment ${firefly-version}
+item
+item --key 0x08 back Back to top menu...
+iseq ${menu-default} menu-recovery && isset ${submenu-default} && goto menu-recovery-timed ||
+choose selected && goto ${selected} || goto start
+:menu-recovery-timed
+choose --timeout ${submenu-timeout} --default ${submenu-default} selected && goto ${selected} || goto start
+
+:sysrcd
+echo Booting SystemRescueCD ${sysrcd-version} x86 for ${initiator-iqn}
+# Fixup needed after copying files from downloaded ISO to directory:
+#  cd path/to/sysrcd-iso-unpacked-files/isolinux && \
+#   perl -p -i -e 's{/bootdisk}{../bootdisk}' isolinux.cfg && \
+#   perl -p -i -e 's{scandelay=1}{scandelay=1 dodhcp netboot=nfs://nas.smidsrod.lan:/raid/boot/sysrcd-3.8.0-x86}g' isolinux.cfg && \
+#   perl -p -i -e 's{setkmap=us}{setkmap=us dodhcp netboot=nfs://nas.smidsrod.lan:/raid/boot/sysrcd-3.8.0-x86}g' isolinux.cfg && \
+#   perl -p -i -e 's{rescuecd_us}{rescuecd_no}; s{US}{NO}; s{setkmap=us}{setkmap=no}g; s{american}{norwegian};' isolinux.cfg && \
+#   cd -
+# PXELinux options, see http://syslinux.zytor.com/wiki/index.php/PXELINUX for details
+set 210:string ${boot-url}sysrcd-${sysrcd-version}-x86/isolinux/
+set 209:string isolinux.cfg
+set filename ${210:string}pxelinux.0
+chain ${filename} || goto failed
+goto start
+
+:macrium-winpe
+echo Booting Macrium Reflect ${macrium-version} (WinPE 4.0 ${arch}) for ${initiator-iqn}
+set base-url macrium-${macrium-version}/macrium-${macrium-version}-rescue-winpe-4.0-${arch}
+kernel wimboot
+initrd ${base-url}/bootmgr          bootmgr
+initrd ${base-url}/Boot/BCD         BCD
+initrd ${base-url}/Boot/boot.sdi    boot.sdi
+initrd ${base-url}/sources/boot.wim boot.wim
+boot || goto failed
+goto start
+
+:macrium-linux
+echo Booting Macrium Reflect ${macrium-version} (Linux ${arch}) for ${initiator-iqn}
+set base-url macrium-${macrium-version}/macrium-${macrium-version}-rescue-linux
+kernel ${base-url}/vmlinuz
+initrd ${base-url}/initramfs.xz
+imgargs vmlinuz vga=0x317
+boot || goto failed
+goto start
+
+:macrium-winpe-sanboot
+sanboot --no-describe ${sanboot-url}macrium-${macrium-version}/macrium-${macrium-version}-rescue-winpe-4.0-${arch}.iso || goto failed
+goto start
+
+:macrium-linux-sanboot
+sanboot --no-describe ${sanboot-url}macrium-${macrium-version}/macrium-${macrium-version}-rescue-linux.iso || goto failed
+goto start
+
+:firefly
+echo Booting Firefly ${firefly-version} for ${initiator-iqn}
+set base-url firefly-${firefly-version}/boot
+# http://alexeremin.blogspot.no/2013/05/firefly-failsafe-image-for-illumos.html
+# http://sourceforge.net/projects/fireflyfailsafe/files/
+# Download ISO, unpack ISO and copy files to boot-url
+# The ramdisk is compressed with gzip, which must be unpacked
+# to work with iPXE
+# mv firefly firefly.gz
+# gunzip firefly.gz
+kernel ${base-url}/platform/i86pc/kernel/amd64/unix
+module ${base-url}/firefly
+boot || goto failed
+goto start
+
+##################################################################
+###################### DIAGNOSTICS MENU #############################
+##################################################################
+
+:menu-diag
+menu Diagnostic tools
+item memtest       Memtest86+
+item
+item --key 0x08 back Back to top menu...
+iseq ${menu-default} menu-diag && isset ${submenu-default} && goto menu-diag-timed ||
+choose selected && goto ${selected} || goto start
+:menu-diag-timed
+choose --timeout ${submenu-timeout} --default ${submenu-default} selected && goto ${selected} || goto start
+
+:memtest
+# Test to see if we are UEFI
+# If we are not, assume BIOS -- otherwise fail (for some reason we're not UEFI or BIOS)
+#iseq ${platform} efi && chain ${os-image-dir}memtest64.efi || chain ${os-image-dir}memtest64.bin || goto failed
+iseq ${platform} efi && chain http://${http-server-ip}${http-os-image-dir}memtest64.efi || chain http://${http-server-ip}${http-os-image-dir}memtest64.bin || goto failed
+
+goto start
+
+##################################################################
+############################ INSTALLER MENU #########################
+##################################################################
+:menu-install
+menu Installers for MACADDR ${mac}
+item centos7-install Install CentOS 7 ${archl} from ${http-os-image-dir}ISOs archive
+item centos8-install Install CentOS 8 ${archl} from ${http-os-image-dir}ISOs archive
+item ubuntu2210-install Install Ubuntu 22.10 ${archl} from ${http-os-image-dir}ISOs archive
+item
+item --key 0x08 back      Back to top menu...
+iseq ${menu-default} menu-install && isset ${submenu-default} && goto menu-install-timed ||
+choose selected && goto ${selected} || goto start
+:menu-install-timed
+choose --timeout ${submenu-timeout} --default ${submenu-default} selected && goto ${selected} || goto start
+
+:centos7-install
+echo Starting CentOS 7 ${archl} local installer for mac-${mac}
+sleep 3
+set base-url ${http-boot-url}centos7
+kernel ${base-url}/images/pxeboot/vmlinuz inst.repo=${base-url} ip=dhcp ipv6.disable initrd=initrd.img inst.geoloc=0 devfs=nomount
+initrd ${base-url}/images/pxeboot/initrd.img
+boot || goto failed
+goto start
+
+:centos8-install
+echo Starting CentOS 8 ${archl} local installer for mac-${mac}
+sleep 3
+set base-url ${http-boot-url}centos8
+kernel ${base-url}/images/pxeboot/vmlinuz inst.repo=${base-url}/ ip=dhcp ipv6.disable initrd=initrd.img inst.geoloc=0 devfs=nomount
+initrd ${base-url}/images/pxeboot/initrd.img
+boot || goto failed
+goto start
+
+:ubuntu-install-local
+echo Starting Ubuntu 12.04 ${archl} local installer for ${initiator-iqn}
+set base-url ${http-boot-url}centos7
+kernel ${http-base-url}/images/pxeboot/vmlinuz inst.repo=${http-base-url}/ ip=dhcp ipv6.disable initrd=initrd.img inst.geoloc=0 devfs=nomount
+initrd ${http-base-url}/images/pxeboot/initrd.img
+boot || goto failed
+goto start
+
+:ubuntu-installer-remote
+echo Starting Ubuntu 12.04 ${archl} installer for ${initiator-iqn}
+set base-url http://no.archive.ubuntu.com/ubuntu/dists/precise/main/installer-${archl}/current/images/netboot/ubuntu-installer/${archl}
+kernel ${base-url}/linux
+initrd ${base-url}/initrd.gz
+#imgargs linux auto=true url=http://yourserver/some/path/preseed.cfg
+boot || goto failed
+goto start
+
+##################################################################
+###################### LIVE ENVIRONMENT MENU ########################
+##################################################################
+
+:menu-live
+menu Live environments for ${initiator-iqn}
+item ubuntu-live-1204          Boot Ubuntu LiveCD 12.04 ${archl}
+item
+item --key 0x08 back      Back to top menu...
+iseq ${menu-default} menu-live && isset ${submenu-default} && goto menu-live-timed ||
+choose selected && goto ${selected} || goto start
+:menu-live-timed
+choose --timeout ${submenu-timeout} --default ${submenu-default} selected && goto ${selected} || goto start
+
+:ubuntu-live-1204
+# See http://manpages.ubuntu.com/manpages/precise/man7/casper.7.html for casper cmdline details
+echo Booting Ubuntu Live 12.04 ${archl} for ${initiator-iqn}
+set base-url ubuntu-12.04-dvd-${archl}
+kernel ${base-url}/casper/vmlinuz
+initrd ${base-url}/casper/initrd.lz
+imgargs vmlinuz root=/dev/nfs boot=casper netboot=nfs nfsroot=${nfs-server}:${nfs-root}${base-url} locale=en_US.UTF-8 keyboard-configuration/layoutcode=no mirror/country=NO
+shell
+boot || goto failed
+goto start

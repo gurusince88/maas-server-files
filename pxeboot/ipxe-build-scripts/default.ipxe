@@ -1,0 +1,26 @@
+#!ipxe
+echo
+echo
+echo
+echo *************************************************************************
+echo ****************************** ATTENTION ********************************
+echo *************************************************************************
+echo This is the default MaaS build script.
+echo
+echo You got here because the system MACADDR: ${mac:hexraw} has not been  
+echo authorized for an auto-build.  Please contact your Ops Team.
+echo
+echo Sending this machine to the main menu.
+echo *************************************************************************
+echo *************************************************************************
+echo 
+echo
+echo
+echo
+echo
+echo
+sleep 10
+set menu-default reboot
+set submenu-default ubuntu-live-1204-amd64
+echo Loading ${menu-url}
+chain --replace --autofree ${menu-url}
