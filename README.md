@@ -1,4 +1,5 @@
 # maas-server-files
+<pre>
 -- The DNSMASQ Service
   -- DNSMASQ provides DHCP services that focus strictly on PXE requests
     -- DNSMASQ/DHCP will respond to L2 DHCP requests OR requests that are fowarded.  
@@ -52,3 +53,4 @@ The file system layout for the CDW/DV MaaS Service:
 -- Get the target machines raw MAC address (ie. No dashes or colons)
 -- Copy the centos7-ipxe-build-template in /pxeboot/ipxe-build-templates to /pxeboot/ipxe-build-scripts/mac-{raw MAC address}.ipxe file
 -- Power up the target machine
+</pre>
