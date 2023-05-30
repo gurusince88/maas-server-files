@@ -20,7 +20,7 @@ item --gap --             ---------------- for server MACADDR: ${mac:hexraw} ---
 item --gap --             ----------------------- Platform Type: ${platform} -----------------------------
 item --gap --             ------------------------- Operating systems ------------------------------
 item --key u local        Boot from local disk
-item --key l menu-live    Live environments...
+item --key l menu-live    Boot a live ISO...
 item --gap --             ------------------------- Tools and utilities ----------------------------
 item --key r menu-recovery Recovery tools...
 item --key d menu-diag    Diagnostics tools...
@@ -86,11 +86,6 @@ goto start
 :menu-recovery
 menu Recovery tools
 item sysrcd          SystemRescueCD ${sysrcd-version}
-item macrium-winpe Macrium Reflect ${macrium-version} Rescue CD (WinPE 4.0 ${arch})
-item macrium-winpe-sanboot   Macrium Reflect ${macrium-version} Rescue CD (WinPE 4.0 ${arch} with sanboot)
-item macrium-linux   Macrium Reflect ${macrium-version} Rescue CD (Linux ${arch})
-item macrium-linux-sanboot   Macrium Reflect ${macrium-version} Rescue CD (Linux ${arch} with sanboot)
-item firefly         Firefly IllumOS recovery environment ${firefly-version}
 item
 item --key 0x08 back Back to top menu...
 iseq ${menu-default} menu-recovery && isset ${submenu-default} && goto menu-recovery-timed ||
@@ -114,48 +109,6 @@ set filename ${210:string}pxelinux.0
 chain ${filename} || goto failed
 goto start
 
-:macrium-winpe
-echo Booting Macrium Reflect ${macrium-version} (WinPE 4.0 ${arch}) for ${initiator-iqn}
-set base-url macrium-${macrium-version}/macrium-${macrium-version}-rescue-winpe-4.0-${arch}
-kernel wimboot
-initrd ${base-url}/bootmgr          bootmgr
-initrd ${base-url}/Boot/BCD         BCD
-initrd ${base-url}/Boot/boot.sdi    boot.sdi
-initrd ${base-url}/sources/boot.wim boot.wim
-boot || goto failed
-goto start
-
-:macrium-linux
-echo Booting Macrium Reflect ${macrium-version} (Linux ${arch}) for ${initiator-iqn}
-set base-url macrium-${macrium-version}/macrium-${macrium-version}-rescue-linux
-kernel ${base-url}/vmlinuz
-initrd ${base-url}/initramfs.xz
-imgargs vmlinuz vga=0x317
-boot || goto failed
-goto start
-
-:macrium-winpe-sanboot
-sanboot --no-describe ${sanboot-url}macrium-${macrium-version}/macrium-${macrium-version}-rescue-winpe-4.0-${arch}.iso || goto failed
-goto start
-
-:macrium-linux-sanboot
-sanboot --no-describe ${sanboot-url}macrium-${macrium-version}/macrium-${macrium-version}-rescue-linux.iso || goto failed
-goto start
-
-:firefly
-echo Booting Firefly ${firefly-version} for ${initiator-iqn}
-set base-url firefly-${firefly-version}/boot
-# http://alexeremin.blogspot.no/2013/05/firefly-failsafe-image-for-illumos.html
-# http://sourceforge.net/projects/fireflyfailsafe/files/
-# Download ISO, unpack ISO and copy files to boot-url
-# The ramdisk is compressed with gzip, which must be unpacked
-# to work with iPXE
-# mv firefly firefly.gz
-# gunzip firefly.gz
-kernel ${base-url}/platform/i86pc/kernel/amd64/unix
-module ${base-url}/firefly
-boot || goto failed
-goto start
 
 ##################################################################
 ###################### DIAGNOSTICS MENU #############################
@@ -212,7 +165,7 @@ initrd ${base-url}/images/pxeboot/initrd.img
 boot || goto failed
 goto start
 
-:ubuntu-install-local
+:ubuntu2210-install
 echo Starting Ubuntu 12.04 ${archl} local installer for ${initiator-iqn}
 set base-url ${http-boot-url}centos7
 kernel ${http-base-url}/images/pxeboot/vmlinuz inst.repo=${http-base-url}/ ip=dhcp ipv6.disable initrd=initrd.img inst.geoloc=0 devfs=nomount
@@ -220,22 +173,15 @@ initrd ${http-base-url}/images/pxeboot/initrd.img
 boot || goto failed
 goto start
 
-:ubuntu-installer-remote
-echo Starting Ubuntu 12.04 ${archl} installer for ${initiator-iqn}
-set base-url http://no.archive.ubuntu.com/ubuntu/dists/precise/main/installer-${archl}/current/images/netboot/ubuntu-installer/${archl}
-kernel ${base-url}/linux
-initrd ${base-url}/initrd.gz
-#imgargs linux auto=true url=http://yourserver/some/path/preseed.cfg
-boot || goto failed
-goto start
+
 
 ##################################################################
 ###################### LIVE ENVIRONMENT MENU ########################
 ##################################################################
 
 :menu-live
-menu Live environments for ${initiator-iqn}
-item ubuntu-live-1204          Boot Ubuntu LiveCD 12.04 ${archl}
+menu Live environments for mac-${mac}
+item ubuntu-live-2210          Boot Ubuntu LiveCD 22.10 ${archl}
 item
 item --key 0x08 back      Back to top menu...
 iseq ${menu-default} menu-live && isset ${submenu-default} && goto menu-live-timed ||
@@ -243,13 +189,9 @@ choose selected && goto ${selected} || goto start
 :menu-live-timed
 choose --timeout ${submenu-timeout} --default ${submenu-default} selected && goto ${selected} || goto start
 
-:ubuntu-live-1204
-# See http://manpages.ubuntu.com/manpages/precise/man7/casper.7.html for casper cmdline details
-echo Booting Ubuntu Live 12.04 ${archl} for ${initiator-iqn}
-set base-url ubuntu-12.04-dvd-${archl}
-kernel ${base-url}/casper/vmlinuz
-initrd ${base-url}/casper/initrd.lz
-imgargs vmlinuz root=/dev/nfs boot=casper netboot=nfs nfsroot=${nfs-server}:${nfs-root}${base-url} locale=en_US.UTF-8 keyboard-configuration/layoutcode=no mirror/country=NO
+:ubuntu-live-2210
+echo Booting Ubuntu Live 22.10 ${archl} for mac-${mac}
+sanboot ${http-boot-url}/ISOs/ubuntu22-10.iso 
 shell
 boot || goto failed
 goto start
