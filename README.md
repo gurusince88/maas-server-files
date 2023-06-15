@@ -19,23 +19,25 @@
 
 The file system layout for the CDW/DV MaaS Service:
 
-/etc/apache2/
-|-- apache2.conf
-|       --  ports.conf (port 8080 enabled)
-|       -- /pxeboot/ (allow file indexing)
-|       -- /mnt/pxe-os/ (allow file indexing)
-|-- conf-enabled
-|       -- 000-pxeboot.conf
-|-- sites-enabled
-|       -- 000-pxeboot.conf
-/pxeboot/
-|-- firmware (the ipxe boot files)
-|-- ipxe-build-scripts (where ipxe looks for authorized machine build directives)
-|-- ipxe-build-templates (where we keep the templates used to make the build directives)
-|-- ipxe-config (the ipxe scripts that make it all happen)
-|-- os-images/
-|---- /ISOs (contains the OS installation ISOs)
-|---- /{ISO mount point folders. eg., centos7, centos8, etc.}
+  /etc/apache2/
+  |-- apache2.conf
+  |       --  ports.conf (port 8080 enabled)
+  |       -- /pxeboot/ (allow file indexing)
+  |       -- /mnt/pxe-os/ (allow file indexing)
+  |-- conf-enabled
+  |       -- 000-pxeboot.conf
+  |-- sites-enabled
+  |       -- 000-pxeboot.conf
+  /opt/pxeboot/
+  |-- firmware (the ipxe boot files)
+  |-- ipxe-build-scripts (where ipxe looks for authorized machine build directives)
+  |-- ipxe-build-templates (where we keep the templates used to make the build directives)
+  |-- ipxe-config (the ipxe scripts that make it all happen)
+  /opt/os-images/
+  |---- /ISOs (contains the OS installation ISOs)
+  |---- /{ISO mount point folders. eg., centos7, centos8, etc.}
+  /var/www/html
+  |-- This documentation
 
 -- Create a build script template for CentOS-7 in /pxeboot/ipxe-build-templates (ie. centos7-ipxe-build-template.ipxe)
 ---- These can be likely automated, but likely will require hand seeding at first
@@ -53,4 +55,143 @@ The file system layout for the CDW/DV MaaS Service:
 -- Get the target machines raw MAC address (ie. No dashes or colons)
 -- Copy the centos7-ipxe-build-template in /pxeboot/ipxe-build-templates to /pxeboot/ipxe-build-scripts/mac-{raw MAC address}.ipxe file
 -- Power up the target machine
+</pre>
+
+The PXE Boot Server Build Process
+<pre>
+-- Ubuntu 22.10
+	Live DVD
+-- Recommended Server install
+
+
+Login as user:
+Userid:pxe
+Passed: NetApp!23
+
+sudo apt update
+sudo apt upgrade
+
+
+~/mkdir temp
+cd temp
+# grab the latest PXEBOOT server config files
+git clone https://github.com/steve-jones62/maas-server-files.git
+
+
+###########################################################################################
+# Installation of PXEBOOT files
+############################################################################################
+cd /opt
+
+sudo cp -r ~/temp/maas-server-files/pxeboot .
+sudo chown -R pxe:pxe pxeboot
+
+sudo cp -r ~/temp/maas-server-files/os-images .
+sudo chown -R pxe:pxe os-images 
+
+Copy all needed .iso's to this directory
+cd ..
+Ensure that there is a folder for each needed .iso
+Mount each .iso at /opt/os-images/{os-name}  (HINT:  use short names for the mount points.  Examples are already provided eg., centos7, centos8, etc.)
+
+cd /opt/pxeboot/ipxe-config
+Edit boot.ipxe.cfg and update the following:
+
+---------------------------------------------------------
+# These 2 params MUST change based on the host server
+---------------------------------------------------------
+set http-server-ip 192.168.128.26:8080
+set http-server-name hpc-pxe-2u-clone:8080
+set https-server-ip 192.168.128.26:443
+
+
+###########################################################################################
+# Installation of DNSMASQ requires turning off the resolver stub and replacing resolve.conf
+############################################################################################
+sudo systemctl disable system-resolved
+sudo systemctl stop systems-resolved
+sudo unlink /etc/resolv.conf
+
+# NOTE: A nameserver directive needs to be created for each required nameserver.  This example refrenses Google DNS
+echo nameserver 8.8.8.8 | sudo tee /etc/resolv.conf
+
+# Install DNSMASQ
+sudo apt install dnsmasq
+
+cd /etc
+sudo cp dnsmasq.conf dnsmasq.conf.sav
+sudo cp ~/temp/maas-server-files/etc/dnsmasq.conf /etc/dnsmasq.conf
+Edit dnsmasq.conf
+
+------------------------------------------------------------------
+--- change these lines to match the IP address info for your site
+--- This example is of a server with a non-routed and routed interface.  x.y.184.z is the private L2 subnet, x.y.128.z is the routed
+------------------------------------------------------------------
+# listen on PXEBOOT interface/vlan
+listen-address=192.168.184.100
+interface=ens38
+
+
+# DHCP range 10.0.0.200 ~ 10.0.0.250
+dhcp-range=192.168.184.50,192.168.184.99,255.255.255.0,24h
+
+# Default gateway
+dhcp-option=3,192.168.184.100
+
+# Domain name - homelab.net
+dhcp-option=15,kupjones.com
+
+# Broadcast address
+dhcp-option=28,192.168.184.255
+
+dhcp-boot=tag:!ipxe,tag:BIOS,firmware/undionly.kpxe,,192.168.184.156    <------- This is your tftp server address (this server -- it has 2 interfaces)
+dhcp-boot=tag:!ipxe,tag:!BIOS,firmware/ipxe.efi,,192.168.184.156        <-------- ibid
+dhcp-boot=tag:ipxe,http://192.168.128.24:8080/ipxe-config/boot.ipxe     <-------- This is your web server (it can be this same server - this one has 2 interfaces)
+
+# ------------------------------------------
+-- Now restart dnsmasq
+sudo systemctl restart dnsmasq
+
+
+------ TEST:  sudo systemctl status dnsmasq --------
+
+
+###########################################################################################
+# Installation of Apache
+############################################################################################
+
+sudo apt install apache2
+sudo apt install php
+cd /var/www/html
+sudo mv index.html index.html.sav
+sudo cp -r ~/temp/maas-server-files/var/www/html/* .
+
+
+---------------------
+-- update the apache2 config files
+
+cd /etc/apache2
+sudo mv apache2.conf apache2.conf.sav
+sudo mv ports.conf ports.conf.sav
+sudo cp ~/temp/maas-server-files/etc/apache2/apache2.conf .
+sudo cp ~/temp/maas-server-files/etc/apache2/ports.conf .
+sudo cp ~/temp/maas-server-files/etc/apache2/sites-available/000-pxeboot.conf ./sites-available/
+cd sites-enabled
+sudo ln -s ../sites-available/000-pxeboot.conf .
+
+sudo systemctl restart apache2 
+
+
+
+
+-----------------------------------------
+- Testing
+-----------------------------------------
+
+wget {server ip} ---------------> documentation page
+wget {server ip}:8080 ----------> file list of /pxboot root
+sudo tail -f /var/log/dnsmasq.log
+sudo tail -f /var/log/apache2/pxeboot-access.log 
+
+
 </pre>
