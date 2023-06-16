@@ -84,16 +84,19 @@ git clone https://github.com/steve-jones62/maas-server-files.git
 cd /opt
 
 sudo cp -r ~/temp/maas-server-files/pxeboot .
-sudo chown -R pxe:pxe pxeboot
+sudo chown -R iac:iac pxeboot
 
 sudo cp -r ~/temp/maas-server-files/os-images .
-sudo chown -R pxe:pxe os-images 
+sudo chown -R iac:iac os-images 
 
 Copy all needed .iso's to this directory
 cd ..
 Ensure that there is a folder for each needed .iso
 Mount each .iso at /opt/os-images/{os-name}  (HINT:  use short names for the mount points.  Examples are already provided eg., centos7, centos8, etc.)
 
+**Example: ** 	mount -o loop -t iso9660 --read-only /opt/ISO/CentOS-Stream-8-boot.iso /opt/os-images/centos8/
+		mkdir /mnt/pxe-os
+		mount -o loop -t iso9660 --read-only /opt/ISO/CentOS-Stream-8-boot.iso	/mnt/pxe-os
 cd /opt/pxeboot/ipxe-config
 Edit boot.ipxe.cfg and update the following:
 
@@ -152,6 +155,9 @@ dhcp-boot=tag:ipxe,http://192.168.128.24:8080/ipxe-config/boot.ipxe     <-------
 -- Now restart dnsmasq
 sudo systemctl restart dnsmasq
 
+	Troublehsooting:
+	chmod 777 /opt/
+	sudo chown iac:iac /opt/
 
 ------ TEST:  sudo systemctl status dnsmasq --------
 
@@ -160,8 +166,8 @@ sudo systemctl restart dnsmasq
 # Installation of Apache
 ############################################################################################
 
-sudo apt install apache2
-sudo apt install php
+sudo apt install apache2	#Skipped
+sudo apt install php		#skipped
 cd /var/www/html
 sudo mv index.html index.html.sav
 sudo cp -r ~/temp/maas-server-files/var/www/html/* .
